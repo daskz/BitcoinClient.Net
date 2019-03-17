@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using BitcoinClient.API.Data;
+using BitcoinClient.API.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -31,6 +32,9 @@ namespace BitcoinClient.API
 
             ConfigureAuthentication(services);
             ConfigureIdentity(services);
+
+            services.AddScoped<IBitcoinService, BitcoinService>();
+            services.AddScoped<RpcClient>();
 
             services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Version_2_2);
         }
