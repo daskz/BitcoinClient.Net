@@ -15,6 +15,7 @@ namespace BitcoinClient.API.Data
         public Guid Id { get; set; }
         public string AddressId { get; set; }
         public Wallet Wallet { get; set; }
+        public DateTime CreatedDate { get; set; }
     }
 
     public class Transaction

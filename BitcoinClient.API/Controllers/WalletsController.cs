@@ -23,14 +23,44 @@ namespace BitcoinClient.API.Controllers
         public async Task<IActionResult> GetWallets()
         {
             var wallets = await _bitcoinService.GetUserWalletsAsync();
-            return Ok(wallets.Select(w => new {w.Id, w.Balance}));
+            return Ok(wallets.Select(w => new
+            {
+                w.Id,
+                w.Balance
+            }));
         }
 
         [HttpPost]
         public async Task<IActionResult> CreateWallet()
         {
-            var wallet = await _bitcoinService.CreateWallet();
-            return Ok(new { wallet.Id, wallet.Balance });
+            var wallet = await _bitcoinService.CreateWalletAsync();
+            return Ok(new
+            {
+                wallet.Id,
+                wallet.Balance
+            });
+        }
+
+        [HttpGet("{walletId}/addresses")]
+        public async Task<IActionResult> GetAddresses(Guid walletId)
+        {
+            var addresses = await _bitcoinService.GetWalletAddressesAsync(walletId);
+            return Ok(addresses.Select(a => new
+            {
+                Address = a.AddressId,
+                a.CreatedDate
+            }));
+        }
+
+        [HttpPost("{walletId}/addresses")]
+        public async Task<IActionResult> CreateAddress(Guid walletId)
+        {
+            var address = await _bitcoinService.CreateWalletAddressAsync(walletId);
+            return Ok(new
+            {
+                Address = address.AddressId,
+                address.CreatedDate
+            });
         }
     }
 }
