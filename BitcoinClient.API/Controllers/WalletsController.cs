@@ -62,5 +62,18 @@ namespace BitcoinClient.API.Controllers
                 address.CreatedDate
             });
         }
+
+        [HttpPost("{walletId}/transactions")]
+        public async Task<IActionResult> CreateOutputTransaction(Guid walletId, OutputTransactionDto dto)
+        {
+            await _bitcoinService.CreateOutputTransaction(walletId, dto.Address, dto.Amount);
+            return Ok();
+        }
+
+        public class OutputTransactionDto
+        {
+            public decimal Amount { get; set; }
+            public string Address { get; set; }
+        }
     }
 }

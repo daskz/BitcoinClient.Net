@@ -70,13 +70,10 @@ namespace BitcoinClient.API.Services
 
         public async Task<Address> CreateWalletAddressAsync(Guid walletId)
         {
+            await CheckWalletAccess(walletId);
+
             using (var transaction = _context.Database.BeginTransaction())
             {
-                var currentUser = await GetCurrentUser();
-                var isOwnWallet = _context.Wallets.Include(w => w.User).Any(w => w.Id == walletId && w.User.Id == currentUser.Id);
-                if(!isOwnWallet)
-                    throw new InvalidOperationException();
-
                 var result = _client.Invoke("getnewaddress", walletId.ToString());
                 if(!result.IsSuccessful)
                     throw new ApplicationException();
@@ -93,6 +90,54 @@ namespace BitcoinClient.API.Services
 
                 return address;
             }
+        }
+
+        public async Task CreateOutputTransaction(Guid walletId, string address, decimal amount)
+        {
+            await CheckWalletAccess(walletId);
+
+            using (var dbContextTransaction = _context.Database.BeginTransaction())
+            {
+                var transactionResult = _client.Invoke("sendtoaddress", walletId.ToString(), address, amount);
+                if(!transactionResult.IsSuccessful)
+                    throw new ApplicationException(transactionResult.Result["error"].Value<string>());
+
+                var txId = transactionResult.Result["result"].Value<string>();
+                var transactionInfo = _client.Invoke("gettransaction", walletId.ToString(), txId).Result["result"];
+
+                var fee = Math.Abs(transactionInfo.Value<decimal>("fee"));
+                var time = DateTimeOffset.FromUnixTimeSeconds(transactionInfo.Value<long>("time"));
+                var destinationAddress = _context.Addresses.FirstOrDefault(a => a.AddressId == address);
+                if (destinationAddress == null)
+                {
+                    destinationAddress = _context.Add(new Address
+                    {
+                        AddressId = address,
+                        Wallet = null,
+                        CreatedDate = DateTime.Now
+                    }).Entity;
+                }
+                _context.OutputTransactions.Add(new OutputTransaction
+                {
+                    TxId = txId,
+                    Wallet = _context.Wallets.Find(walletId),
+                    Address = destinationAddress,
+                    Amount = amount,
+                    Fee = fee,
+                    Time = time.UtcDateTime
+                });
+
+                _context.SaveChanges();
+                dbContextTransaction.Commit();
+            }
+        }
+
+        private async Task CheckWalletAccess(Guid walletId)
+        {
+            var currentUser = await GetCurrentUser();
+            var isOwnWallet = _context.Wallets.Include(w => w.User).Any(w => w.Id == walletId && w.User.Id == currentUser.Id);
+            if (!isOwnWallet)
+                throw new InvalidOperationException();
         }
     }
 }
