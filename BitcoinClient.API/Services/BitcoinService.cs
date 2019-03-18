@@ -132,20 +132,60 @@ namespace BitcoinClient.API.Services
             }
         }
 
-        public async Task<List<InputTransaction>> GetLastInputTransactions(bool onlyNotRequested)
+        public async Task<List<InputTransaction>> GetLastInputTransactions(bool includeRequested)
         {
             var currentUser = await GetCurrentUser();
             var lastTransactions =  await _context.InputTransactions
                 .Where(t => t.Wallet.User.Id == currentUser.Id 
-                            && !t.IsRequested == onlyNotRequested
-                            && t.ConfirmationCount < 3)
+                            && (includeRequested || t.IsRequested == false || t.ConfirmationCount < 3))
                 .Include(t => t.Address)
                 .Include(t => t.Wallet)
+                .AsNoTracking()
                 .ToListAsync();
 
-            lastTransactions.Where(t => !t.IsRequested).ToList().ForEach(t => t.IsRequested = true);
+            _context.InputTransactions.UpdateRange(
+                lastTransactions.Where(t => !t.IsRequested).Select(t =>
+                {
+                    t.IsRequested = true;
+                    return t;
+                }));
             await _context.SaveChangesAsync();
+            
             return lastTransactions;
+        }
+
+        public async Task CreateOrUpdateInputTransaction(string txId)
+        {
+            var result = _client.Invoke("gettransaction", "miner", txId, true);
+            if(!result.IsSuccessful) throw new ApplicationException(result.Error);
+
+            var confirmations = result.Result["result"].Value<int>("confirmations");
+            var time = DateTimeOffset.FromUnixTimeSeconds(result.Result["result"].Value<long>("time"));
+            var inputTransactionJson = result.Result["result"]["details"].Where(d => d["category"].Value<string>() == "receive");
+
+            var transactions =  inputTransactionJson.Select(it =>
+            {
+                var addressId = it["address"].Value<string>();
+                var inputTransaction = _context.InputTransactions.Include(t => t.Address).SingleOrDefault(t => t.Address.AddressId == addressId && t.TxId == txId);
+                if (inputTransaction == null)
+                {
+                    var address = _context.Addresses.Include(a => a.Wallet).Single(a => a.AddressId == addressId);
+                    inputTransaction = new InputTransaction
+                    {
+                        TxId = txId,
+                        Address = address,
+                        Wallet = address.Wallet,
+                        Amount = it["amount"].Value<decimal>(),
+                        ConfirmationCount = confirmations,
+                        Time = time.UtcDateTime
+                    };
+                }
+                
+                inputTransaction.ConfirmationCount = confirmations;
+                return inputTransaction;
+            });
+            _context.UpdateRange(transactions);
+            await _context.SaveChangesAsync();
         }
 
         private async Task CheckWalletAccess(Guid walletId)

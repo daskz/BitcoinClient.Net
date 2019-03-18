@@ -71,9 +71,9 @@ namespace BitcoinClient.API.Controllers
         }
 
         [HttpGet("{walletId}/transactions")]
-        public async Task<IActionResult> GetLastInputTransactions(bool onlyNotRequested = true)
+        public async Task<IActionResult> GetLastInputTransactions(bool includeRequested = false)
         {
-            var inputTransactions = await _bitcoinService.GetLastInputTransactions(onlyNotRequested);
+            var inputTransactions = await _bitcoinService.GetLastInputTransactions(includeRequested);
             return Ok(inputTransactions.Select(t => new
             {
                 t.TxId,
@@ -83,6 +83,13 @@ namespace BitcoinClient.API.Controllers
                 t.Amount,
                 t.ConfirmationCount
             }));
+        }
+
+        [HttpPost("transactions/{txId}")]
+        public async Task<IActionResult> NotifyWallet(string txId)
+        {
+            await _bitcoinService.CreateOrUpdateInputTransaction(txId);
+            return Ok();
         }
 
         public class OutputTransactionDto
