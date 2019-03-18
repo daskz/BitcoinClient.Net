@@ -31,6 +31,7 @@ namespace BitcoinClient.API.Data
 
     public class InputTransaction : Transaction
     {
+        public bool IsRequested { get; set; }
         public int ConfirmationCount { get; set; }
     }
 

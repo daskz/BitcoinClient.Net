@@ -70,6 +70,21 @@ namespace BitcoinClient.API.Controllers
             return Ok();
         }
 
+        [HttpGet("{walletId}/transactions")]
+        public async Task<IActionResult> GetLastInputTransactions(bool onlyNotRequested = true)
+        {
+            var inputTransactions = await _bitcoinService.GetLastInputTransactions(onlyNotRequested);
+            return Ok(inputTransactions.Select(t => new
+            {
+                t.TxId,
+                t.Time,
+                Address = t.Address.AddressId,
+                WalletId = t.Wallet.Id,
+                t.Amount,
+                t.ConfirmationCount
+            }));
+        }
+
         public class OutputTransactionDto
         {
             public decimal Amount { get; set; }

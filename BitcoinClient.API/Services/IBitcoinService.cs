@@ -12,5 +12,6 @@ namespace BitcoinClient.API.Services
         Task<List<Address>> GetWalletAddressesAsync(Guid walletId);
         Task<Address> CreateWalletAddressAsync(Guid walletId);
         Task CreateOutputTransaction(Guid walletId, string address, decimal amount);
+        Task<List<InputTransaction>> GetLastInputTransactions(bool onlyNotRequested);
     }
 }

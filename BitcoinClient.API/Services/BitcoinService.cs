@@ -132,6 +132,22 @@ namespace BitcoinClient.API.Services
             }
         }
 
+        public async Task<List<InputTransaction>> GetLastInputTransactions(bool onlyNotRequested)
+        {
+            var currentUser = await GetCurrentUser();
+            var lastTransactions =  await _context.InputTransactions
+                .Where(t => t.Wallet.User.Id == currentUser.Id 
+                            && !t.IsRequested == onlyNotRequested
+                            && t.ConfirmationCount < 3)
+                .Include(t => t.Address)
+                .Include(t => t.Wallet)
+                .ToListAsync();
+
+            lastTransactions.Where(t => !t.IsRequested).ToList().ForEach(t => t.IsRequested = true);
+            await _context.SaveChangesAsync();
+            return lastTransactions;
+        }
+
         private async Task CheckWalletAccess(Guid walletId)
         {
             var currentUser = await GetCurrentUser();
