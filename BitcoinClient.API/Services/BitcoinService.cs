@@ -156,17 +156,26 @@ namespace BitcoinClient.API.Services
 
         public async Task CreateOrUpdateInputTransaction(string txId)
         {
+            await CreateOrUpdateTransaction(txId);
+        }
+
+        private async Task CreateOrUpdateTransaction(string txId)
+        {
             var result = _client.Invoke("gettransaction", "miner", txId, true);
-            if(!result.IsSuccessful) throw new ApplicationException(result.Error);
+            if (!result.IsSuccessful) throw new ApplicationException(result.Error);
 
             var confirmations = result.Result["result"].Value<int>("confirmations");
             var time = DateTimeOffset.FromUnixTimeSeconds(result.Result["result"].Value<long>("time"));
-            var inputTransactionJson = result.Result["result"]["details"].Where(d => d["category"].Value<string>() == "receive");
+            var inputTransactionJson =
+                result.Result["result"]["details"].Where(d => d["category"].Value<string>() == "receive");
 
-            var transactions =  inputTransactionJson.Select(it =>
+            var transactions = inputTransactionJson.Select(it =>
             {
                 var addressId = it["address"].Value<string>();
-                var inputTransaction = _context.InputTransactions.Include(t => t.Address).SingleOrDefault(t => t.Address.AddressId == addressId && t.TxId == txId);
+                var inputTransaction = _context.InputTransactions
+                    .Include(t => t.Address)
+                    .Include(t => t.Wallet)
+                    .SingleOrDefault(t => t.Address.AddressId == addressId && t.TxId == txId);
                 if (inputTransaction == null)
                 {
                     var address = _context.Addresses.Include(a => a.Wallet).Single(a => a.AddressId == addressId);
@@ -180,12 +189,23 @@ namespace BitcoinClient.API.Services
                         Time = time.UtcDateTime
                     };
                 }
-                
+
                 inputTransaction.ConfirmationCount = confirmations;
+                var balance = _client.Invoke("getbalance", inputTransaction.Wallet.Id.ToString()).Result["result"].Value<decimal>();
+                inputTransaction.Wallet.Balance = balance;
                 return inputTransaction;
             });
             _context.UpdateRange(transactions);
             await _context.SaveChangesAsync();
+        }
+
+        public async Task UpdateNotConfirmedTransactions()
+        {
+            var txIds = _context.InputTransactions.Where(t => t.ConfirmationCount < 6).Select(t => t.TxId).ToList();
+            foreach (var txId in txIds)
+            {
+                await CreateOrUpdateTransaction(txId);
+            }
         }
 
         private async Task CheckWalletAccess(Guid walletId)

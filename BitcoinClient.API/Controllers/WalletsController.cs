@@ -92,6 +92,13 @@ namespace BitcoinClient.API.Controllers
             return Ok();
         }
 
+        [HttpPost("/api/blocks/{blockHash}")]
+        public async Task<IActionResult> NotifyBlock(string blockHash)
+        {
+            await _bitcoinService.UpdateNotConfirmedTransactions();
+            return Ok(blockHash);
+        }
+
         public class OutputTransactionDto
         {
             public decimal Amount { get; set; }

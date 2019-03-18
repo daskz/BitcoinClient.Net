@@ -14,5 +14,6 @@ namespace BitcoinClient.API.Services
         Task CreateOutputTransaction(Guid walletId, string address, decimal amount);
         Task<List<InputTransaction>> GetLastInputTransactions(bool includeRequested);
         Task CreateOrUpdateInputTransaction(string txId);
+        Task UpdateNotConfirmedTransactions();
     }
 }
