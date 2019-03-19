@@ -26,6 +26,9 @@ namespace BitcoinClient.API.Data
             builder.Entity<InputTransaction>()
                 .Property(p => p.Fee)
                 .HasColumnType(precision);
+            builder.Entity<InputTransaction>()
+                .HasAlternateKey("TxId", "AddressId");
+
             builder.Entity<OutputTransaction>()
                 .Property(p => p.Amount)
                 .HasColumnType(precision);
