@@ -1,4 +1,5 @@
 using System;
+using System.Net.Mime;
 using System.Text;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Identity;
@@ -7,10 +8,14 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using BitcoinClient.API.Data;
 using BitcoinClient.API.Services;
+using BitcoinClient.API.Services.Rpc;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
+using Newtonsoft.Json;
 
 namespace BitcoinClient.API
 {
@@ -94,12 +99,17 @@ namespace BitcoinClient.API
         {
             if (env.IsDevelopment())
             {
-                app.UseDeveloperExceptionPage();
-                app.UseDatabaseErrorPage();
+                app.UseExceptionHandler(a => a.Run(async context =>
+                {
+                    var exception = context.Features.Get<IExceptionHandlerPathFeature>().Error;
+
+                    var result = JsonConvert.SerializeObject(new { error = exception.Message, stackTrace = exception.StackTrace });
+                    context.Response.ContentType = MediaTypeNames.Application.Json;
+                    await context.Response.WriteAsync(result);
+                }));
             }
             else
             {
-                // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
                 app.UseHsts();
             }
 
