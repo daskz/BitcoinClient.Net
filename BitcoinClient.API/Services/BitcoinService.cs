@@ -37,7 +37,7 @@ namespace BitcoinClient.API.Services
 
         private async Task<IdentityUser> GetCurrentUser()
         {
-            return await _userManager.GetUserAsync(_httpContextAccessor.HttpContext.User);
+            return await _userManager.FindByNameAsync(_httpContextAccessor.HttpContext.User.Identity.Name);
         }
 
         public async Task<Wallet> CreateWalletAsync()

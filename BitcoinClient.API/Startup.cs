@@ -35,8 +35,8 @@ namespace BitcoinClient.API
                 options.UseSqlServer(
                     Configuration.GetConnectionString("DefaultConnection")));
 
-            ConfigureAuthentication(services);
             ConfigureIdentity(services);
+            ConfigureAuthentication(services);
 
             services.AddScoped<IBitcoinService, BitcoinService>();
             services.AddScoped<RpcClient>();
@@ -50,7 +50,12 @@ namespace BitcoinClient.API
         private void ConfigureAuthentication(IServiceCollection services)
         {
             services
-                .AddAuthentication(o => o.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme)
+                .AddAuthentication(o =>
+                {
+                    o.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                    o.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+                    o.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+                })
                 .AddJwtBearer(o =>
                 {
                     o.RequireHttpsMetadata = false;
