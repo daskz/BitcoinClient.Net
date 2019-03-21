@@ -18,13 +18,15 @@ namespace BitcoinClient.API.Services
         private readonly UserManager<IdentityUser> _userManager;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly RpcClient _rpcClient;
+        private readonly IInputTransactionUpdater _inputTransactionUpdater;
 
-        public BitcoinService(ApplicationDbContext context, UserManager<IdentityUser> userManager, IHttpContextAccessor httpContextAccessor, RpcClient rpcClient)
+        public BitcoinService(ApplicationDbContext context, UserManager<IdentityUser> userManager, IHttpContextAccessor httpContextAccessor, RpcClient rpcClient, IInputTransactionUpdater inputTransactionUpdater)
         {
             _context = context;
             _userManager = userManager;
             _httpContextAccessor = httpContextAccessor;
             _rpcClient = rpcClient;
+            _inputTransactionUpdater = inputTransactionUpdater;
         }
 
         public async Task<List<Wallet>> GetUserWalletsAsync()
@@ -147,11 +149,11 @@ namespace BitcoinClient.API.Services
             return destinationAddress;
         }
 
-        public async Task<List<InputTransaction>> GetLastInputTransactions(bool includeRequested)
+        public async Task<List<InputTransaction>> GetLastInputTransactions(Guid walletId, bool includeRequested)
         {
-            var currentUser = await GetCurrentUser();
+            await CheckWalletAccess(walletId);
             var lastTransactions =  await _context.InputTransactions
-                .Where(t => t.Wallet.User.Id == currentUser.Id 
+                .Where(t => t.Wallet.Id == walletId 
                             && (includeRequested || t.IsRequested == false || t.ConfirmationCount < 3))
                 .Include(t => t.Address)
                 .Include(t => t.Wallet)
@@ -170,48 +172,7 @@ namespace BitcoinClient.API.Services
 
         public async Task CreateOrUpdateInputTransaction(string txId)
         {
-            await CreateOrUpdateTransaction(txId);
-        }
-
-        private async Task CreateOrUpdateTransaction(string txId)
-        {
-            var response = _rpcClient.Invoke<GetTransactionResult>(RpcMethod.gettransaction, null, txId, true);
-            if (!response.IsSuccessful) throw new ApplicationException(response.Error.Message);
-
-            var confirmations = response.Result.Confirmations;
-            var time = DateTimeOffset.FromUnixTimeSeconds(response.Result.Time);
-
-            var receivedTransactions = response.Result.Details.Where(d => d.Category == TransactionCategory.receive.ToString());
-
-            var inputTransactions = receivedTransactions.Select(rt =>
-            {
-                var inputTransaction = _context.InputTransactions
-                    .Include(t => t.Address)
-                    .Include(t => t.Wallet)
-                    .SingleOrDefault(t => t.Address.AddressId == rt.Address && t.TxId == txId);
-
-                if (inputTransaction == null)
-                {
-                    var address = GetOrCreateAddress(rt.Address);
-                    inputTransaction = new InputTransaction
-                    {
-                        TxId = txId,
-                        Address = address,
-                        Wallet = address.Wallet,
-                        Amount = rt.Amount,
-                        ConfirmationCount = confirmations,
-                        Time = time.UtcDateTime,
-                    };
-                }
-
-                inputTransaction.ConfirmationCount = confirmations;
-                var balanceResponse = _rpcClient.Invoke<decimal>(RpcMethod.getbalance, inputTransaction.Wallet.Id);
-                inputTransaction.Wallet.Balance = balanceResponse.Result;
-                return inputTransaction;
-            });
-
-            _context.UpdateRange(inputTransactions);
-            await _context.SaveChangesAsync();
+            await _inputTransactionUpdater.Update(txId);
         }
 
         public async Task UpdateNotConfirmedTransactions()
@@ -219,7 +180,7 @@ namespace BitcoinClient.API.Services
             var txIds = _context.InputTransactions.Where(t => t.ConfirmationCount < 6).Select(t => t.TxId).ToList();
             foreach (var txId in txIds)
             {
-                await CreateOrUpdateTransaction(txId);
+                await _inputTransactionUpdater.Update(txId);
             }
         }
 
@@ -228,7 +189,7 @@ namespace BitcoinClient.API.Services
             var currentUser = await GetCurrentUser();
             var isOwnWallet = _context.Wallets.Include(w => w.User).Any(w => w.Id == walletId && w.User.Id == currentUser.Id);
             if (!isOwnWallet)
-                throw new InvalidOperationException();
+                throw new InvalidOperationException("Invalid wallet");
         }
     }
 }

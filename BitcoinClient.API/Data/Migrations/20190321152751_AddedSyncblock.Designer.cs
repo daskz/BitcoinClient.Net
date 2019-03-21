@@ -4,14 +4,16 @@ using BitcoinClient.API.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace BitcoinClient.API.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20190321152751_AddedSyncblock")]
+    partial class AddedSyncblock
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -46,7 +48,7 @@ namespace BitcoinClient.API.Data.Migrations
                         .IsRequired();
 
                     b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(16, 8)");
+                        .HasColumnType("decimal(9, 8)");
 
                     b.Property<long>("ConfirmationCount");
 
@@ -78,10 +80,10 @@ namespace BitcoinClient.API.Data.Migrations
                     b.Property<Guid?>("AddressId");
 
                     b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(16, 8)");
+                        .HasColumnType("decimal(9, 8)");
 
                     b.Property<decimal>("Fee")
-                        .HasColumnType("decimal(16, 8)");
+                        .HasColumnType("decimal(9, 8)");
 
                     b.Property<DateTime>("Time");
 
@@ -120,7 +122,7 @@ namespace BitcoinClient.API.Data.Migrations
                         .ValueGeneratedOnAdd();
 
                     b.Property<decimal>("Balance")
-                        .HasColumnType("decimal(16, 8)");
+                        .HasColumnType("decimal(9, 8)");
 
                     b.Property<string>("UserId");
 

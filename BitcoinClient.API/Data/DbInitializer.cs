@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Linq;
-using BitcoinClient.API.Services;
 using BitcoinClient.API.Services.Rpc;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
@@ -22,8 +21,7 @@ namespace BitcoinClient.API.Data
             if (!rpcResponse.IsSuccessful && rpcResponse.Error.Code == RpcErrorCode.RPC_WALLET_ERROR)
             {
                 rpcClient.Invoke<object>(RpcMethod.loadwallet, null, configuration["NodeConfig:DefaultWallet"]);
-            }
-            else throw new ApplicationException();
+            } else if(!rpcResponse.IsSuccessful) throw new ApplicationException(rpcResponse.Error.Message);
 
             foreach (var walletId in context.Wallets.Select(w => w.Id))
             {

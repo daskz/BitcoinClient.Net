@@ -1,15 +1,15 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using BitcoinClient.API.Services;
-using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BitcoinClient.API.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]
     public class WalletsController : ControllerBase
     {
         private readonly IBitcoinService _bitcoinService;
@@ -71,9 +71,9 @@ namespace BitcoinClient.API.Controllers
         }
 
         [HttpGet("{walletId}/transactions")]
-        public async Task<IActionResult> GetLastInputTransactions(bool includeRequested = false)
+        public async Task<IActionResult> GetLastInputTransactions(Guid walletId, bool includeRequested = false)
         {
-            var inputTransactions = await _bitcoinService.GetLastInputTransactions(includeRequested);
+            var inputTransactions = await _bitcoinService.GetLastInputTransactions(walletId, includeRequested);
             return Ok(inputTransactions.Select(t => new
             {
                 t.TxId,
@@ -85,14 +85,16 @@ namespace BitcoinClient.API.Controllers
             }));
         }
 
-        [HttpPost("transactions/{txId}")]
+        [AllowAnonymous]
+        [HttpPut("transactions/{txId}")]
         public async Task<IActionResult> NotifyWallet(string txId)
         {
             await _bitcoinService.CreateOrUpdateInputTransaction(txId);
             return Ok();
         }
 
-        [HttpPost("/api/blocks/{blockHash}")]
+        [AllowAnonymous]
+        [HttpPut("/api/blocks/{blockHash}")]
         public async Task<IActionResult> NotifyBlock(string blockHash)
         {
             await _bitcoinService.UpdateNotConfirmedTransactions();

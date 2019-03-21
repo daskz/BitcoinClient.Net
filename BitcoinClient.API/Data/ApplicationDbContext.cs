@@ -16,15 +16,12 @@ namespace BitcoinClient.API.Data
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
-            var precision = "decimal(9, 8)";
+            var precision = "decimal(16, 8)";
             builder.Entity<Wallet>()
                 .Property(p => p.Balance)
                 .HasColumnType(precision);
             builder.Entity<InputTransaction>()
                 .Property(p => p.Amount)
-                .HasColumnType(precision);
-            builder.Entity<InputTransaction>()
-                .Property(p => p.Fee)
                 .HasColumnType(precision);
             builder.Entity<InputTransaction>()
                 .HasAlternateKey("TxId", "AddressId");
@@ -43,5 +40,6 @@ namespace BitcoinClient.API.Data
         public DbSet<Address> Addresses { get; set; }
         public DbSet<InputTransaction> InputTransactions { get; set; }
         public DbSet<OutputTransaction> OutputTransactions { get; set; }
+        public DbSet<SyncBlock> SyncBlocks { get; set; }
     }
 }

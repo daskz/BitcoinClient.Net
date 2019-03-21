@@ -40,6 +40,9 @@ namespace BitcoinClient.API
 
             services.AddScoped<IBitcoinService, BitcoinService>();
             services.AddScoped<RpcClient>();
+            services.AddHostedService<TransactionHostedService>();
+            services.AddScoped<ITransactionSynchronizer, TransactionSynchronizer>();
+            services.AddScoped<IInputTransactionUpdater, InputTransactionUpdater>();
 
             services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Version_2_2);
         }

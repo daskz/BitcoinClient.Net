@@ -23,6 +23,9 @@
         sendtoaddress,
         gettransaction,
         getbalance,
-        loadwallet
+        loadwallet,
+        getblockcount,
+        getblockhash,
+        getblock
     }
 }

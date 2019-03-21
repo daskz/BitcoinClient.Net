@@ -26,17 +26,24 @@ namespace BitcoinClient.API.Data
         public Address Address { get; set; }
         public Wallet Wallet { get; set; }
         public decimal Amount { get; set; }
-        public decimal Fee { get; set; }
     }
 
     public class InputTransaction : Transaction
     {
         public bool IsRequested { get; set; }
-        public int ConfirmationCount { get; set; }
+        public long ConfirmationCount { get; set; }
     }
 
     public class OutputTransaction : Transaction
     {
+        public decimal Fee { get; set; }
+    }
 
+    public class SyncBlock
+    {
+        public Guid Id { get; set; }
+        public long Index { get; set; }
+        public string Hash { get; set; }
+        public DateTime CreatedDate { get; set; }
     }
 }
