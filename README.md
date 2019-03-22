@@ -34,3 +34,5 @@
 
 Метод для события notifyblock
 
+
+![Diagram](https://github.com/daskz/BitcoinClient.Net/blob/master/Diagram.png)
