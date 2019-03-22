@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
-using BitcoinClient.API.Data;
 using BitcoinClient.API.Dtos;
 using BitcoinClient.API.Services;
 using BitcoinClient.API.Services.BackgroundQueue;
@@ -9,7 +8,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.VisualStudio.Web.CodeGeneration.Contracts.Messaging;
 
 namespace BitcoinClient.API.Controllers
 {
@@ -19,16 +17,10 @@ namespace BitcoinClient.API.Controllers
     public class WalletsController : ControllerBase
     {
         private readonly IBitcoinService _bitcoinService;
-        private readonly IBackgroundTaskQueue _backgroundTaskQueue;
-        private readonly IServiceScopeFactory _serviceScopeFactory;
-        private readonly ILogger<WalletsController> _logger;
 
-        public WalletsController(IBitcoinService bitcoinService, IBackgroundTaskQueue backgroundTaskQueue, IServiceScopeFactory serviceScopeFactory, ILogger<WalletsController> logger )
+        public WalletsController(IBitcoinService bitcoinService)
         {
             _bitcoinService = bitcoinService;
-            _backgroundTaskQueue = backgroundTaskQueue;
-            _serviceScopeFactory = serviceScopeFactory;
-            _logger = logger;
         }
 
         [HttpGet]

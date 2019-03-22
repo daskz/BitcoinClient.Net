@@ -43,17 +43,15 @@ namespace BitcoinClient.API.Services.BlockSync
             var transactionSinceBlocks = sinceBlockResponse.Result.Transactions.Where(t => t.Category == TransactionCategory.receive.ToString()).ToList();
             _logger.Log(LogLevel.Debug, $"BlockIndex {currentBlock.Index}, {transactionSinceBlocks.Count} transactions found");
 
-            if(!transactionSinceBlocks.Any())
-                return;
-
-            _backgroundTaskQueue.QueueBackgroundWorkItem(async token =>
-            {
-                using (var scope = _serviceScopeFactory.CreateScope())
+            if(transactionSinceBlocks.Any())
+                _backgroundTaskQueue.QueueBackgroundWorkItem(async token =>
                 {
-                    var inputTransactionUpdater = scope.ServiceProvider.GetRequiredService<IInputTransactionUpdater>();
-                    await inputTransactionUpdater.UpdateAsync(transactionSinceBlocks);
-                }
-            });
+                    using (var scope = _serviceScopeFactory.CreateScope())
+                    {
+                        var inputTransactionUpdater = scope.ServiceProvider.GetRequiredService<IInputTransactionUpdater>();
+                        await inputTransactionUpdater.UpdateAsync(transactionSinceBlocks);
+                    }
+                });
 
             if (sinceBlockResponse.Result.Lastblock != currentBlock.Hash)
                 await SaveLastBlock(sinceBlockResponse.Result.Lastblock);

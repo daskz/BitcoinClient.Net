@@ -20,17 +20,15 @@ namespace BitcoinClient.API.Services
         private readonly UserManager<IdentityUser> _userManager;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly RpcClient _rpcClient;
-        private readonly IInputTransactionUpdater _inputTransactionUpdater;
         private readonly IBackgroundTaskQueue _backgroundTaskQueue;
         private readonly IServiceScopeFactory _serviceScopeFactory;
 
-        public BitcoinService(ApplicationDbContext context, UserManager<IdentityUser> userManager, IHttpContextAccessor httpContextAccessor, RpcClient rpcClient, IInputTransactionUpdater inputTransactionUpdater, IBackgroundTaskQueue backgroundTaskQueue, IServiceScopeFactory serviceScopeFactory)
+        public BitcoinService(ApplicationDbContext context, UserManager<IdentityUser> userManager, IHttpContextAccessor httpContextAccessor, RpcClient rpcClient, IBackgroundTaskQueue backgroundTaskQueue, IServiceScopeFactory serviceScopeFactory)
         {
             _context = context;
             _userManager = userManager;
             _httpContextAccessor = httpContextAccessor;
             _rpcClient = rpcClient;
-            _inputTransactionUpdater = inputTransactionUpdater;
             _backgroundTaskQueue = backgroundTaskQueue;
             _serviceScopeFactory = serviceScopeFactory;
         }
@@ -164,7 +162,14 @@ namespace BitcoinClient.API.Services
 
         public void CreateOrUpdateInputTransaction(string txId)
         {
-            QueueTransactionUpdate(txId);
+            _backgroundTaskQueue.QueueBackgroundWorkItem(async token =>
+            {
+                using (var scope = _serviceScopeFactory.CreateScope())
+                {
+                    var inputTransactionUpdater = scope.ServiceProvider.GetRequiredService<IInputTransactionUpdater>();
+                    await inputTransactionUpdater.UpdateAsync(txId);
+                }
+            });
         }
 
         public void UpdateNotConfirmedTransactions()
@@ -172,22 +177,17 @@ namespace BitcoinClient.API.Services
             var txIds = _context.InputTransactions.Where(t => t.ConfirmationCount < 6).Select(t => t.TxId).ToList();
             foreach (var txId in txIds)
             {
-                QueueTransactionUpdate(txId);
-            }
-        }
-
-        private void QueueTransactionUpdate(string txId)
-        {
-            _backgroundTaskQueue.QueueBackgroundWorkItem(async token =>
-            {
-                using (var scope = _serviceScopeFactory.CreateScope())
+                _backgroundTaskQueue.QueueBackgroundWorkItem(async token =>
                 {
-                    var inputTransactionUpdater = scope.ServiceProvider.GetRequiredService<IInputTransactionUpdater>();
-                    var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-                    if(context.InputTransactions.Where(it => it.TxId == txId).Any(it => it.ConfirmationCount < 6))
-                        await inputTransactionUpdater.UpdateAsync(txId);
-                }
-            });
+                    using (var scope = _serviceScopeFactory.CreateScope())
+                    {
+                        var inputTransactionUpdater = scope.ServiceProvider.GetRequiredService<IInputTransactionUpdater>();
+                        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                        if (context.InputTransactions.Where(it => it.TxId == txId).Any(it => it.ConfirmationCount < 6))
+                            await inputTransactionUpdater.UpdateAsync(txId);
+                    }
+                });
+            }
         }
 
         private async Task CheckWalletAccess(Guid walletId)

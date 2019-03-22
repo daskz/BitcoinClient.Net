@@ -85,6 +85,7 @@ namespace BitcoinClient.API.Services
                             inputTransaction.Wallet.Balance = balanceResponse.Result;
                     }
 
+                    _context.Update(inputTransaction);
                     await _context.SaveChangesAsync();
                 }
                 catch (Exception e)
