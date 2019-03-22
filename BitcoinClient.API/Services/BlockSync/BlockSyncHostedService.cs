@@ -1,38 +1,33 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 
-namespace BitcoinClient.API.Services
+namespace BitcoinClient.API.Services.BlockSync
 {
-    public class TransactionHostedService : IHostedService, IDisposable
+    public class BlockSyncHostedService : IHostedService, IDisposable
     {
         private Timer _timer;
         public IServiceProvider Services { get; }
 
-        public TransactionHostedService(IServiceProvider services)
+        public BlockSyncHostedService(IServiceProvider services)
         {
             Services = services;
         }
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
-            _timer = new Timer(DoWork, null, TimeSpan.Zero, TimeSpan.FromMinutes(2));
-
+            _timer = new Timer(async state => await DoWorkAsync(state), null, TimeSpan.Zero, TimeSpan.FromMinutes(2));
             return Task.CompletedTask;
         }
 
-        private void DoWork(object state)
+        private async Task DoWorkAsync(object state)
         {
             using (var scope = Services.CreateScope())
             {
-                var synchronizer = scope.ServiceProvider
-                        .GetRequiredService<ITransactionSynchronizer>();
-                synchronizer.UpdateTransactions();
+                var synchronizer = scope.ServiceProvider.GetRequiredService<IBlockSynchronizer>();
+                await synchronizer.Execute();
             }
         }
 

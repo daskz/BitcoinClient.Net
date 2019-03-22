@@ -8,11 +8,11 @@ namespace BitcoinClient.API.Services.Rpc.ResultEntities
 
     public class ListSinceBlockResult
     {
-        public List<TransactionResult> Transactions { get; set; }
+        public List<TransactionInfo> Transactions { get; set; }
         public string Lastblock { get; set; }
     }
 
-    public class TransactionResult
+    public class TransactionInfo
     {
         public string Address { get; set; }
         public string Category { get; set; }

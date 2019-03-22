@@ -23,10 +23,11 @@ namespace BitcoinClient.API
                 {
                     var context = services.GetRequiredService<ApplicationDbContext>();
                     var userManager = services.GetRequiredService<UserManager<IdentityUser>>();
+                    var roleManager = services.GetRequiredService<RoleManager<IdentityRole>>();
                     var rpcClient = services.GetRequiredService<RpcClient>();
                     var configuration = services.GetRequiredService<IConfiguration>();
 
-                    DbInitializer.Initialize(context, userManager, configuration, rpcClient);
+                    DbInitializer.Initialize(context, userManager, roleManager, configuration, rpcClient);
                 }
                 catch (Exception ex)
                 {

@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using BitcoinClient.API.Data;
+using BitcoinClient.API.Services.BackgroundQueue;
 using BitcoinClient.API.Services.Rpc;
 using BitcoinClient.API.Services.Rpc.ResultEntities;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json.Linq;
 
 namespace BitcoinClient.API.Services
@@ -19,14 +21,18 @@ namespace BitcoinClient.API.Services
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly RpcClient _rpcClient;
         private readonly IInputTransactionUpdater _inputTransactionUpdater;
+        private readonly IBackgroundTaskQueue _backgroundTaskQueue;
+        private readonly IServiceScopeFactory _serviceScopeFactory;
 
-        public BitcoinService(ApplicationDbContext context, UserManager<IdentityUser> userManager, IHttpContextAccessor httpContextAccessor, RpcClient rpcClient, IInputTransactionUpdater inputTransactionUpdater)
+        public BitcoinService(ApplicationDbContext context, UserManager<IdentityUser> userManager, IHttpContextAccessor httpContextAccessor, RpcClient rpcClient, IInputTransactionUpdater inputTransactionUpdater, IBackgroundTaskQueue backgroundTaskQueue, IServiceScopeFactory serviceScopeFactory)
         {
             _context = context;
             _userManager = userManager;
             _httpContextAccessor = httpContextAccessor;
             _rpcClient = rpcClient;
             _inputTransactionUpdater = inputTransactionUpdater;
+            _backgroundTaskQueue = backgroundTaskQueue;
+            _serviceScopeFactory = serviceScopeFactory;
         }
 
         public async Task<List<Wallet>> GetUserWalletsAsync()
@@ -42,95 +48,81 @@ namespace BitcoinClient.API.Services
 
         public async Task<Wallet> CreateWalletAsync()
         {
-            using (var transaction = _context.Database.BeginTransaction())
+            var walletId = Guid.NewGuid();
+            var responseTask = _rpcClient.Invoke<object>(RpcMethod.createwallet, null, walletId);
+
+            var wallet = _context.Add(new Wallet
             {
-                var wallet = _context.Add(new Wallet
-                {
-                    User = await GetCurrentUser(),
-                    Balance = 0
-                }).Entity;
+                Id = walletId,
+                User = await GetCurrentUser(),
+                Balance = 0
+            }).Entity;
 
+            var response = await responseTask;
+
+            if (response.IsSuccessful)
                 _context.SaveChanges();
+            else throw new Exception("Underlying API error occured");
 
-                var response = _rpcClient.Invoke<object>(RpcMethod.createwallet, null, wallet.Id);
-
-                if (response.IsSuccessful)
-                    transaction.Commit();
-
-                else throw new Exception("Underlying API error occured");
-
-                return wallet;
-            }
+            return wallet;
         }
 
         public async Task<List<Address>> GetWalletAddressesAsync(Guid walletId)
         {
             var currentUser = await GetCurrentUser();
-            return await _context
-                .Addresses
-                .Include(a => a.Wallet)
-                .Where(a => a.Wallet.Id == walletId && a.Wallet.User.Id == currentUser.Id)
-                .ToListAsync();
+            return await _context.Addresses
+                            .Include(a => a.Wallet)
+                            .Where(a => a.Wallet.Id == walletId && a.Wallet.User.Id == currentUser.Id)
+                            .ToListAsync();
         }
 
         public async Task<Address> CreateWalletAddressAsync(Guid walletId)
         {
             await CheckWalletAccess(walletId);
 
-            using (var transaction = _context.Database.BeginTransaction())
+            var response = await _rpcClient.Invoke<string>(RpcMethod.getnewaddress, walletId);
+            if (!response.IsSuccessful)
+                throw new ApplicationException(response.Error.Message);
+
+            var address = _context.Add(new Address
             {
-                var response = _rpcClient.Invoke<string>(RpcMethod.getnewaddress, walletId);
-                if(!response.IsSuccessful)
-                    throw new ApplicationException(response.Error.Message);
+                AddressId = response.Result,
+                Wallet = await _context.Wallets.FindAsync(walletId),
+                CreatedDate = DateTime.Now
+            }).Entity;
 
-                var address = _context.Add(new Address
-                {
-                    AddressId = response.Result,
-                    Wallet = await _context.Wallets.FindAsync(walletId),
-                    CreatedDate = DateTime.Now
-                }).Entity;
+            _context.SaveChanges();
 
-                var importResponse = _rpcClient.Invoke<object>(RpcMethod.importaddress, null, address.AddressId, "", false);
-                if (!importResponse.IsSuccessful)
-                    throw new ApplicationException(importResponse.Error.Message);
+            await _rpcClient.Invoke<object>(RpcMethod.importaddress, null, address.AddressId, "", false);
 
-                _context.SaveChanges();
-                transaction.Commit();
-
-                return address;
-            }
+            return address;
         }
 
         public async Task CreateOutputTransaction(Guid walletId, string address, decimal amount)
         {
             await CheckWalletAccess(walletId);
 
-            using (var dbContextTransaction = _context.Database.BeginTransaction())
+            var response = await _rpcClient.Invoke<string>(RpcMethod.sendtoaddress, walletId, address, amount);
+            if (!response.IsSuccessful)
+                throw new ApplicationException(response.Error.Message);
+
+            var txId = response.Result;
+            var transactionResponse = await _rpcClient.Invoke<GetTransactionResult>(RpcMethod.gettransaction, walletId, txId);
+
+            var fee = Math.Abs(transactionResponse.Result.Fee);
+            var time = DateTimeOffset.FromUnixTimeSeconds(transactionResponse.Result.Time);
+            var destinationAddress = GetOrCreateAddress(address);
+            _context.OutputTransactions.Add(new OutputTransaction
             {
-                var response = _rpcClient.Invoke<string>(RpcMethod.sendtoaddress, walletId, address, amount);
+                TxId = txId,
+                Wallet = _context.Wallets.Find(walletId),
+                Address = destinationAddress,
+                Amount = amount,
+                Fee = fee,
+                Time = time.UtcDateTime
+            });
 
-                if(!response.IsSuccessful)
-                    throw new ApplicationException(response.Error.Message);
-
-                var txId = response.Result;
-                var transactionResponse = _rpcClient.Invoke<GetTransactionResult>(RpcMethod.gettransaction, walletId, txId);
-
-                var fee = Math.Abs(transactionResponse.Result.Fee);
-                var time = DateTimeOffset.FromUnixTimeSeconds(transactionResponse.Result.Time);
-                var destinationAddress = GetOrCreateAddress(address);
-                _context.OutputTransactions.Add(new OutputTransaction
-                {
-                    TxId = txId,
-                    Wallet = _context.Wallets.Find(walletId),
-                    Address = destinationAddress,
-                    Amount = amount,
-                    Fee = fee,
-                    Time = time.UtcDateTime
-                });
-
-                _context.SaveChanges();
-                dbContextTransaction.Commit();
-            }
+            _context.SaveChanges();
         }
 
         private Address GetOrCreateAddress(string address)
@@ -170,18 +162,32 @@ namespace BitcoinClient.API.Services
             return lastTransactions;
         }
 
-        public async Task CreateOrUpdateInputTransaction(string txId)
+        public void CreateOrUpdateInputTransaction(string txId)
         {
-            await _inputTransactionUpdater.Update(txId);
+            QueueTransactionUpdate(txId);
         }
 
-        public async Task UpdateNotConfirmedTransactions()
+        public void UpdateNotConfirmedTransactions()
         {
             var txIds = _context.InputTransactions.Where(t => t.ConfirmationCount < 6).Select(t => t.TxId).ToList();
             foreach (var txId in txIds)
             {
-                await _inputTransactionUpdater.Update(txId);
+                QueueTransactionUpdate(txId);
             }
+        }
+
+        private void QueueTransactionUpdate(string txId)
+        {
+            _backgroundTaskQueue.QueueBackgroundWorkItem(async token =>
+            {
+                using (var scope = _serviceScopeFactory.CreateScope())
+                {
+                    var inputTransactionUpdater = scope.ServiceProvider.GetRequiredService<IInputTransactionUpdater>();
+                    var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+                    if(context.InputTransactions.Where(it => it.TxId == txId).Any(it => it.ConfirmationCount < 6))
+                        await inputTransactionUpdater.UpdateAsync(txId);
+                }
+            });
         }
 
         private async Task CheckWalletAccess(Guid walletId)

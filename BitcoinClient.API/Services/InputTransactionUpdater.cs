@@ -6,6 +6,7 @@ using BitcoinClient.API.Data;
 using BitcoinClient.API.Services.Rpc;
 using BitcoinClient.API.Services.Rpc.ResultEntities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace BitcoinClient.API.Services
 {
@@ -13,75 +14,84 @@ namespace BitcoinClient.API.Services
     {
         private readonly RpcClient _rpcClient;
         private readonly ApplicationDbContext _context;
+        private readonly ILogger<InputTransactionUpdater> _logger;
 
-        public InputTransactionUpdater(RpcClient rpcClient, ApplicationDbContext context)
+        public InputTransactionUpdater(RpcClient rpcClient, ApplicationDbContext context, ILogger<InputTransactionUpdater> logger)
         {
             _rpcClient = rpcClient;
             _context = context;
+            _logger = logger;
         }
 
-        public async Task Update(string txId)
+        public async Task UpdateAsync(string txId)
         {
-            var response = _rpcClient.Invoke<GetTransactionResult>(RpcMethod.gettransaction, null, txId, true);
+            var response = await _rpcClient.Invoke<GetTransactionResult>(RpcMethod.gettransaction, null, txId, true);
             if (!response.IsSuccessful) throw new ApplicationException(response.Error.Message);
 
-            var receivedTransactions = response.Result.Details.Where(d => d.Category == TransactionCategory.receive.ToString());
-            Update(receivedTransactions.Select(rt => new TransactionResult
-            {
-                TxId = txId,
-                Confirmations = response.Result.Confirmations,
-                Time = response.Result.Time,
-                Address = rt.Address,
-                Amount = rt.Amount,
-                Category = rt.Category
-            }).ToList());
+            var receivedTransactions = response
+                .Result
+                .Details
+                .Where(d => d.Category == TransactionCategory.receive.ToString())
+                .Select(rt => new TransactionInfo
+                {
+                    TxId = txId,
+                    Confirmations = response.Result.Confirmations,
+                    Time = response.Result.Time,
+                    Address = rt.Address,
+                    Amount = rt.Amount,
+                    Category = rt.Category
+                });
 
-            await _context.SaveChangesAsync();
+            await CreateOrUpdateTransaction(receivedTransactions);
         }
 
-        public void Update(List<TransactionResult> transactions)
+        public async Task UpdateAsync(IEnumerable<TransactionInfo> transactions)
         {
             var inputTransactions = transactions
-                .Where(rt => _context.Addresses.Any(a => a.AddressId == rt.Address))
-                .Select(CreateOrUpdateTransaction);
+                .Where(rt => _context.Addresses.Any(a => a.AddressId == rt.Address));
 
-            _context.UpdateRange(inputTransactions);
+            await CreateOrUpdateTransaction(inputTransactions);
         }
 
-        private InputTransaction CreateOrUpdateTransaction(TransactionResult transactionResult)
+        private async Task CreateOrUpdateTransaction(IEnumerable<TransactionInfo> transactionInfos)
         {
-            var inputTransaction = _context.InputTransactions
-                .Include(t => t.Address)
-                .Include(t => t.Wallet)
-                .SingleOrDefault(t => t.Address.AddressId == transactionResult.Address && t.TxId == transactionResult.TxId);
-
-            if (inputTransaction == null)
+            foreach (var transactionInfo in transactionInfos)
             {
-                var address = _context.Addresses.Include(a => a.Wallet).Single(a => a.AddressId == transactionResult.Address);
-                inputTransaction = new InputTransaction
+                try
                 {
-                    TxId = transactionResult.TxId,
-                    Address = address,
-                    Wallet = address.Wallet,
-                    Amount = transactionResult.Amount,
-                    ConfirmationCount = transactionResult.Confirmations,
-                    Time = DateTimeOffset.FromUnixTimeSeconds(transactionResult.Time).UtcDateTime
-                };
-            }
+                    var inputTransaction = _context.InputTransactions
+                        .Include(t => t.Wallet)
+                        .SingleOrDefault(t => t.Address.AddressId == transactionInfo.Address && t.TxId == transactionInfo.TxId);
 
-            inputTransaction.ConfirmationCount = transactionResult.Confirmations;
-            if (inputTransaction.ConfirmationCount > 0)
-            {
-                var balanceResponse = _rpcClient.Invoke<decimal>(RpcMethod.getbalance, inputTransaction.Wallet.Id);
-                inputTransaction.Wallet.Balance = balanceResponse.Result;
+                    if (inputTransaction == null)
+                    {
+                        var address = _context.Addresses.Include(a => a.Wallet).Single(a => a.AddressId == transactionInfo.Address);
+                        inputTransaction = new InputTransaction
+                        {
+                            TxId = transactionInfo.TxId,
+                            Address = address,
+                            Wallet = address.Wallet,
+                            Amount = transactionInfo.Amount,
+                            ConfirmationCount = transactionInfo.Confirmations,
+                            Time = DateTimeOffset.FromUnixTimeSeconds(transactionInfo.Time).UtcDateTime
+                        };
+                    }
+
+                    inputTransaction.ConfirmationCount = transactionInfo.Confirmations;
+                    if (inputTransaction.ConfirmationCount > 0)
+                    {
+                        var balanceResponse = await _rpcClient.Invoke<decimal>(RpcMethod.getbalance, inputTransaction.Wallet.Id);
+                        if (balanceResponse.IsSuccessful)
+                            inputTransaction.Wallet.Balance = balanceResponse.Result;
+                    }
+
+                    await _context.SaveChangesAsync();
+                }
+                catch (Exception e)
+                {
+                    _logger.LogError(e, "Error while saving input transaction", transactionInfo.TxId);
+                }
             }
-            return inputTransaction;
         }
-    }
-
-    public interface IInputTransactionUpdater
-    {
-        Task Update(string txId);
-        void Update(List<TransactionResult> transactions);
     }
 }

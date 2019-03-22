@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using BitcoinClient.API.Data;
 using BitcoinClient.API.Services;
+using BitcoinClient.API.Services.BackgroundQueue;
+using BitcoinClient.API.Services.BlockSync;
 using BitcoinClient.API.Services.Rpc;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
@@ -40,9 +42,12 @@ namespace BitcoinClient.API
 
             services.AddScoped<IBitcoinService, BitcoinService>();
             services.AddScoped<RpcClient>();
-            services.AddHostedService<TransactionHostedService>();
-            services.AddScoped<ITransactionSynchronizer, TransactionSynchronizer>();
+            services.AddHostedService<BlockSyncHostedService>();
+            services.AddScoped<IBlockSynchronizer, BlockSynchronizer>();
             services.AddScoped<IInputTransactionUpdater, InputTransactionUpdater>();
+
+            services.AddHostedService<QueuedHostedService>();
+            services.AddSingleton<IBackgroundTaskQueue, BackgroundTaskQueue>();
 
             services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Version_2_2);
         }
@@ -121,7 +126,7 @@ namespace BitcoinClient.API
                 app.UseHsts();
             }
 
-            app.UseHttpsRedirection();
+            //app.UseHttpsRedirection();
             app.UseAuthentication();
 
             app.UseMvc();

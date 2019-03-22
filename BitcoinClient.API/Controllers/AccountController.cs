@@ -1,11 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
+using BitcoinClient.API.Dtos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -42,7 +42,7 @@ namespace BitcoinClient.API.Controllers
             if (!result.Succeeded) return BadRequest("Invalid login attempt");
 
             var appUser = _userManager.Users.SingleOrDefault(r => r.Email == model.Email);
-            return Ok(GenerateJwtToken(model.Email, appUser));
+            return Ok(await GenerateJwtToken(model.Email, appUser));
         }
        
         [HttpPost("register")]
@@ -58,17 +58,19 @@ namespace BitcoinClient.API.Controllers
             if (!result.Succeeded) return BadRequest(result.ToString());
 
             await _signInManager.SignInAsync(user, false);
-            return  Ok(GenerateJwtToken(model.Email, user));
+            return  Ok(await GenerateJwtToken(model.Email, user));
         }
         
-        private object GenerateJwtToken(string email, IdentityUser user)
+        private async Task<object> GenerateJwtToken(string email, IdentityUser user)
         {
+            var roles = await _userManager.GetRolesAsync(user);
             var claims = new List<Claim>
             {
                 new Claim(JwtRegisteredClaimNames.Sub, email),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 new Claim(ClaimTypes.Name, user.UserName),
-                new Claim(ClaimTypes.NameIdentifier, user.Id)
+                new Claim(ClaimTypes.NameIdentifier, user.Id),
+                new Claim(ClaimTypes.Role, roles.FirstOrDefault() ?? "")
             };
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JwtSecurityToken:Key"]));
@@ -84,26 +86,6 @@ namespace BitcoinClient.API.Controllers
             );
 
             return new JwtSecurityTokenHandler().WriteToken(token);
-        }
-        
-        public class LoginDto
-        {
-            [Required]
-            public string Email { get; set; }
-
-            [Required]
-            public string Password { get; set; }
-
-        }
-        
-        public class RegisterDto
-        {
-            [Required]
-            public string Email { get; set; }
-
-            [Required]
-            [StringLength(100, ErrorMessage = "PASSWORD_MIN_LENGTH", MinimumLength = 6)]
-            public string Password { get; set; }
         }
     }
 }

@@ -2,6 +2,7 @@
 using System.IO;
 using System.Net;
 using System.Text;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
@@ -26,7 +27,7 @@ namespace BitcoinClient.API.Services.Rpc
         /// <param name="walletId">Target wallet, if null servicewallet will be used</param>
         /// <param name="parameters">Command parameters</param>
         /// <returns></returns>
-        public RpcResponse<T> Invoke<T>(RpcMethod method, Guid? walletId = null, params object[] parameters)
+        public async Task<RpcResponse<T>> Invoke<T>(RpcMethod method, Guid? walletId = null, params object[] parameters)
         {
             var url = _configuration["NodeConfig:Rpc:Url"] + (walletId?.ToString() ?? _configuration["NodeConfig:DefaultWallet"]);
             HttpWebRequest webRequest = (HttpWebRequest)WebRequest.Create(url);
@@ -50,7 +51,7 @@ namespace BitcoinClient.API.Services.Rpc
 
             try
             {
-                using (WebResponse webResponse = webRequest.GetResponse())
+                using (WebResponse webResponse = await webRequest.GetResponseAsync())
                 {
                     using (Stream str = webResponse.GetResponseStream())
                     {

@@ -13,7 +13,7 @@ namespace BitcoinClient.API.Services
         Task<Address> CreateWalletAddressAsync(Guid walletId);
         Task CreateOutputTransaction(Guid walletId, string address, decimal amount);
         Task<List<InputTransaction>> GetLastInputTransactions(Guid walletId, bool includeRequested);
-        Task CreateOrUpdateInputTransaction(string txId);
-        Task UpdateNotConfirmedTransactions();
+        void CreateOrUpdateInputTransaction(string txId);
+        void UpdateNotConfirmedTransactions();
     }
 }

@@ -1,9 +1,15 @@
 ﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
+using BitcoinClient.API.Data;
+using BitcoinClient.API.Dtos;
 using BitcoinClient.API.Services;
+using BitcoinClient.API.Services.BackgroundQueue;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.VisualStudio.Web.CodeGeneration.Contracts.Messaging;
 
 namespace BitcoinClient.API.Controllers
 {
@@ -13,10 +19,16 @@ namespace BitcoinClient.API.Controllers
     public class WalletsController : ControllerBase
     {
         private readonly IBitcoinService _bitcoinService;
+        private readonly IBackgroundTaskQueue _backgroundTaskQueue;
+        private readonly IServiceScopeFactory _serviceScopeFactory;
+        private readonly ILogger<WalletsController> _logger;
 
-        public WalletsController(IBitcoinService bitcoinService)
+        public WalletsController(IBitcoinService bitcoinService, IBackgroundTaskQueue backgroundTaskQueue, IServiceScopeFactory serviceScopeFactory, ILogger<WalletsController> logger )
         {
             _bitcoinService = bitcoinService;
+            _backgroundTaskQueue = backgroundTaskQueue;
+            _serviceScopeFactory = serviceScopeFactory;
+            _logger = logger;
         }
 
         [HttpGet]
@@ -85,26 +97,20 @@ namespace BitcoinClient.API.Controllers
             }));
         }
 
-        [AllowAnonymous]
+        [Authorize(Roles = UserRole.Service)]
         [HttpPut("transactions/{txId}")]
-        public async Task<IActionResult> NotifyWallet(string txId)
+        public IActionResult NotifyWallet(string txId)
         {
-            await _bitcoinService.CreateOrUpdateInputTransaction(txId);
+            _bitcoinService.CreateOrUpdateInputTransaction(txId);
             return Ok();
         }
 
-        [AllowAnonymous]
+        [Authorize(Roles = UserRole.Service)]
         [HttpPut("/api/blocks/{blockHash}")]
-        public async Task<IActionResult> NotifyBlock(string blockHash)
+        public IActionResult NotifyBlock(string blockHash)
         {
-            await _bitcoinService.UpdateNotConfirmedTransactions();
+            _bitcoinService.UpdateNotConfirmedTransactions();
             return Ok(blockHash);
-        }
-
-        public class OutputTransactionDto
-        {
-            public decimal Amount { get; set; }
-            public string Address { get; set; }
         }
     }
 }
