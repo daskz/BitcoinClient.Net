@@ -10,7 +10,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Newtonsoft.Json.Linq;
 
 namespace BitcoinClient.API.Services
 {
@@ -35,13 +34,12 @@ namespace BitcoinClient.API.Services
 
         public async Task<List<Wallet>> GetUserWalletsAsync()
         {
-            var applicationUser = await GetCurrentUser();
-            return await _context.Wallets.Where(w => w.User.Id == applicationUser.Id).ToListAsync();
+            return await _context.Wallets.Where(w => w.User.Id == GetCurrentUserId()).AsNoTracking().ToListAsync();
         }
 
-        private async Task<IdentityUser> GetCurrentUser()
+        private string GetCurrentUserId()
         {
-            return await _userManager.FindByNameAsync(_httpContextAccessor.HttpContext.User.Identity.Name);
+            return _httpContextAccessor.HttpContext.User.Claims.First(c => c.Type == "Id").Value;
         }
 
         public async Task<Wallet> CreateWalletAsync()
@@ -52,7 +50,7 @@ namespace BitcoinClient.API.Services
             var wallet = _context.Add(new Wallet
             {
                 Id = walletId,
-                User = await GetCurrentUser(),
+                User = await _userManager.FindByIdAsync(GetCurrentUserId()),
                 Balance = 0
             }).Entity;
 
@@ -67,10 +65,9 @@ namespace BitcoinClient.API.Services
 
         public async Task<List<Address>> GetWalletAddressesAsync(Guid walletId)
         {
-            var currentUser = await GetCurrentUser();
             return await _context.Addresses
                             .Include(a => a.Wallet)
-                            .Where(a => a.Wallet.Id == walletId && a.Wallet.User.Id == currentUser.Id)
+                            .Where(a => a.Wallet.Id == walletId && a.Wallet.User.Id == GetCurrentUserId())
                             .ToListAsync();
         }
 
@@ -149,12 +146,10 @@ namespace BitcoinClient.API.Services
                 .Include(t => t.Wallet)
                 .ToListAsync();
 
-            _context.InputTransactions.UpdateRange(
-                lastTransactions.Where(t => !t.IsRequested).Select(t =>
-                {
-                    t.IsRequested = true;
-                    return t;
-                }));
+            foreach (var transaction in lastTransactions.Where(t => !t.IsRequested))
+            {
+                transaction.IsRequested = true;
+            }
             await _context.SaveChangesAsync();
             
             return lastTransactions;
@@ -192,8 +187,7 @@ namespace BitcoinClient.API.Services
 
         private async Task CheckWalletAccess(Guid walletId)
         {
-            var currentUser = await GetCurrentUser();
-            var isOwnWallet = _context.Wallets.Include(w => w.User).Any(w => w.Id == walletId && w.User.Id == currentUser.Id);
+            var isOwnWallet = _context.Wallets.Include(w => w.User).Any(w => w.Id == walletId && w.User.Id == GetCurrentUserId());
             if (!isOwnWallet)
                 throw new InvalidOperationException("Invalid wallet");
         }
