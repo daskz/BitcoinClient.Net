@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading.Tasks;
 using BitcoinClient.API.Data;
 using BitcoinClient.API.Services.Rpc;
 using Microsoft.AspNetCore;
@@ -12,7 +13,7 @@ namespace BitcoinClient.API
 {
     public class Program
     {
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             var host = CreateWebHostBuilder(args).Build();
 
@@ -27,7 +28,7 @@ namespace BitcoinClient.API
                     var rpcClient = services.GetRequiredService<RpcClient>();
                     var configuration = services.GetRequiredService<IConfiguration>();
 
-                    DbInitializer.Initialize(context, userManager, roleManager, configuration, rpcClient);
+                    await DbInitializer.Initialize(context, userManager, roleManager, configuration, rpcClient);
                 }
                 catch (Exception ex)
                 {

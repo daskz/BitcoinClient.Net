@@ -9,27 +9,27 @@ namespace BitcoinClient.API.Data
 {
     public static class DbInitializer
     {
-        public static void Initialize(ApplicationDbContext context, UserManager<IdentityUser> userManager,
+        public static async Task Initialize(ApplicationDbContext context, UserManager<IdentityUser> userManager,
             RoleManager<IdentityRole> roleManager, IConfiguration configuration, RpcClient rpcClient)
         {
-            roleManager.CreateAsync(new IdentityRole(UserRole.Service)).Wait();
+            await roleManager.CreateAsync(new IdentityRole(UserRole.Service));
             var user = new IdentityUser
             {
                 UserName = "service@svc.svc",
                 Email = "service@svc.svc",
             };
-            userManager.CreateAsync(user, "servicepassword").Wait();
-            userManager.AddToRoleAsync(user, UserRole.Service).Wait();
+            await userManager.CreateAsync(user, "servicepassword");
+            await userManager.AddToRoleAsync(user, UserRole.Service);
 
-            var rpcResponse = rpcClient.Invoke<object>(RpcMethod.createwallet, null, configuration["NodeConfig:DefaultWallet"]).Result;
+            var rpcResponse = await rpcClient.Invoke<object>(RpcMethod.createwallet, null, configuration["NodeConfig:DefaultWallet"]);
             if (!rpcResponse.IsSuccessful && rpcResponse.Error.Code == RpcErrorCode.RPC_WALLET_ERROR)
             {
-                rpcClient.Invoke<object>(RpcMethod.loadwallet, null, configuration["NodeConfig:DefaultWallet"]).Wait();
+                await rpcClient.Invoke<object>(RpcMethod.loadwallet, null, configuration["NodeConfig:DefaultWallet"]);
             } else if(!rpcResponse.IsSuccessful) throw new ApplicationException(rpcResponse.Error.Message);
 
             foreach (var walletId in context.Wallets.Select(w => w.Id))
             {
-                rpcClient.Invoke<object>(RpcMethod.loadwallet, null, walletId).Wait();
+                await rpcClient.Invoke<object>(RpcMethod.loadwallet, null, walletId);
             }
         }
     }
