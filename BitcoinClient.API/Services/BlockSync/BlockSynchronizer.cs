@@ -29,35 +29,42 @@ namespace BitcoinClient.API.Services.BlockSync
 
         public async Task Execute()
         {
-            _logger.Log(LogLevel.Debug, "Execute started");
-
-            var currentBlock = await GetCurrentBlock();
-
-            var sinceBlockResponse = await _rpcClient.Invoke<ListSinceBlockResult>(RpcMethod.listsinceblock, null, currentBlock.Hash, 1, true);
-            if (!sinceBlockResponse.IsSuccessful)
+            try
             {
-                _logger.LogError($"{nameof(BlockSynchronizer)}: {sinceBlockResponse.Error.Message}");
-                return;
-            };
+                _logger.Log(LogLevel.Debug, "Execute started");
 
-            var transactionSinceBlocks = sinceBlockResponse.Result.Transactions.Where(t => t.Category == TransactionCategory.receive.ToString()).ToList();
-            _logger.Log(LogLevel.Debug, $"BlockIndex {currentBlock.Index}, {transactionSinceBlocks.Count} transactions found");
+                var currentBlock = await GetCurrentBlock();
 
-            if(transactionSinceBlocks.Any())
-                _backgroundTaskQueue.QueueBackgroundWorkItem(async token =>
+                var sinceBlockResponse = await _rpcClient.Invoke<ListSinceBlockResult>(RpcMethod.listsinceblock, null, currentBlock.Hash, 1, true);
+                if (!sinceBlockResponse.IsSuccessful)
                 {
-                    using (var scope = _serviceScopeFactory.CreateScope())
+                    _logger.LogError($"{nameof(BlockSynchronizer)}: {sinceBlockResponse.Error.Message}");
+                    return;
+                };
+
+                var transactionSinceBlocks = sinceBlockResponse.Result.Transactions.Where(t => t.Category == TransactionCategory.receive.ToString()).ToList();
+                _logger.Log(LogLevel.Debug, $"BlockIndex {currentBlock.Index}, {transactionSinceBlocks.Count} transactions found");
+
+                if (transactionSinceBlocks.Any())
+                    _backgroundTaskQueue.QueueBackgroundWorkItem(async token =>
                     {
-                        var inputTransactionUpdater = scope.ServiceProvider.GetRequiredService<IInputTransactionUpdater>();
-                        await inputTransactionUpdater.UpdateAsync(transactionSinceBlocks);
-                    }
-                });
+                        using (var scope = _serviceScopeFactory.CreateScope())
+                        {
+                            var inputTransactionUpdater = scope.ServiceProvider.GetRequiredService<IInputTransactionUpdater>();
+                            await inputTransactionUpdater.UpdateAsync(transactionSinceBlocks);
+                        }
+                    });
 
-            if (sinceBlockResponse.Result.Lastblock != currentBlock.Hash)
-                await SaveLastBlock(sinceBlockResponse.Result.Lastblock);
+                if (sinceBlockResponse.Result.Lastblock != currentBlock.Hash)
+                    await SaveLastBlock(sinceBlockResponse.Result.Lastblock);
 
-            await _context.SaveChangesAsync();
-            _logger.Log(LogLevel.Debug, "Execute completed");
+                await _context.SaveChangesAsync();
+                _logger.Log(LogLevel.Debug, "Execute completed");
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e, "Error on Block Sync occured");
+            }
         }
 
         private async Task SaveLastBlock(string lastBlockHash)
